@@ -158,6 +158,3 @@ We can also use Azure cosmodb for the vector database for RAG.
   - If the blog structure changes, the scraper may need adjustments.
 - ChromaDB Errors:
   - Ensure the `chromadb` library is properly configured and the `chroma_db` directory is writable.
-
-
-By following these steps, you should have a working or at least testable working code for our use case.
