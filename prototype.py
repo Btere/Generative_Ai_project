@@ -10,6 +10,7 @@ from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from langchain.llms import OpenAI
 
+
 class PersonalizedPorfolioManager:
     def __init__(self, api_key: str, chroma_persist_dir: str = "./chroma_db"):
         """We initialize the PortfolioManager with ChromaDB for vector storage.

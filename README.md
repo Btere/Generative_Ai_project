@@ -1,9 +1,30 @@
+# Project Summary
+
+This repository contains a Python implementation of a Personalized Portfolio Manager designed to optimize and personalize investment portfolios using AI-driven techniques. The focus is on developing a Market Information Agent that collects and cleans data from various sources to provide valuable insights to clients.
+
+## Problem Statement
+Financial institutions often struggle with managing and utilizing diverse financial data effectively. Challenges include data inconsistencies, incomplete datasets, and the need for personalized investment strategies tailored to individual client preferences and market conditions.
+
+### Solution Overview
+The primary use case is developing a Market Information Agent that, the Personalized Portfolio Manager addresses these challenges through the following features, gathers data from financial APIs and textual sources, cleans and preprocesses data to maintain accuracy and provides insights and recommendations to clients, enhancing decision-making in investment management through the following steps.
+
+1. Data Collection: Fetches financial data from APIs (e.g., Yahoo Finance) using specified stock symbols.
+2. Text Scraping and Cleaning: Extracts and preprocesses text from blogs or newsletters to derive insights.
+3. Text Chunking and Storage: Splits text into manageable chunks for efficient storage and retrieval(RAG) using ChromaDB.
+4. AI-Driven Response Generation: Utilizes OpenAI's language models (like GPT) to generate context-aware responses for client queries and collected data.
+
+
+Repository Contents
+prototype.py: Python script showcasing the functionality of the Personalized Portfolio Manager.
+README.md: Documentation providing an overview of the project, installation instructions, and usage guidelines.
+requirement.txt: File for storing all installed libraries.
+
 # Prerequisites
 
 Before running the prototype, ensure the following are installs:
 Python Environment:
    - Install Python 3.8 or later.
-
+   - Install langchain framework
 
 ## Virtual environment
 Virtual environment helps isolate the dependencies required for a project and avoids conflicts with global Python packages. Open your terminal and navigate to the directory where your prototype.py script is located, then type the command to create an environment.
