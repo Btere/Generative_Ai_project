@@ -14,7 +14,7 @@ The primary use case is developing a Market Information Agent that, the Personal
 4. AI-Driven Response Generation: Utilizes OpenAI's language models (like GPT) to generate context-aware responses for client queries and collected data.
 
 
-Repository Contents
+### Repository Contents
 prototype.py: Python script showcasing the functionality of the Personalized Portfolio Manager.
 README.md: Documentation providing an overview of the project, installation instructions, and usage guidelines.
 requirement.txt: File for storing all installed libraries.
