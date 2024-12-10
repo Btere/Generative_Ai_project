@@ -122,15 +122,10 @@ If the prototype runs successfully, you should see:
    ]
    ```
 
-3. Generated Response
-   A financial insight or answer based on the query and retrieved data.
-
-   Example:
-   ```text
-   "Recent trends indicate a rise in tech stocks driven by AI innovations and steady growth in the S&P 500 index."
-   ```
-
 #### Note
+
+We can use bloomberg gpt api as the model to use, it is a  50- billion parameters llm model built from scratch for finance.
+We can also use Azure cosmodb for the vector database for RAG.
 
 ### Troubleshooting
 - Missing Dependencies: Ensure all libraries are installed.
