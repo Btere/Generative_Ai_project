@@ -23,7 +23,7 @@ requirement.txt: File for storing all installed libraries.
 
 Before running the prototype, ensure the following are installs:
 Python Environment:
-   - Install Python 3.8 or later.
+   - Install Python 3.9 or later.
    - Install langchain framework
 
 ## Virtual environment
@@ -56,7 +56,8 @@ When activated, your terminal prompt will change to show the name of the virtual
 Libraries:
    Install the required Python libraries using `pip3`:
    ```bash
-   pip3 install requests beautifulsoup4 nltk langchain chromadb openai
+   pip3 install requests beautifulsoup4 nltk langchain chromadb openai 
+   pip3 install --upgrade nltk
    ```
 
 ### Create the requirements.txt File
@@ -111,7 +112,7 @@ Replace your_openai_api_key_here with your actual API key from OpenAI.
 
 2. **Run ChromaDB Locally**:
    - ChromaDB runs as a local database, so no additional setup is needed. Ensure you have write permissions to the chosen directory.
-
+   - chroma requires sqlit3 >= 3.35.0
 ### Running the Prototype
 
 1. Clone or Copy the Code:

@@ -1,6 +1,7 @@
 beautifulsoup4==4.11.1
-chromadb==0.3.1
+chromadb==0.5.23
 langchain==0.0.164
+langchain_community==0.2.19
 nltk==3.7
 openai==0.27.0
 requests==2.28.1

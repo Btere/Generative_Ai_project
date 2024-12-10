@@ -1,14 +1,20 @@
 import requests
+import yfinance as yf
 from bs4 import BeautifulSoup
 from typing import List, Dict
 import nltk
+nltk.download('stopwords')  # For removing stopwords
+nltk.download('punkt')  # For tokenization
+nltk.download('punkt_tab')  # Specific resource causing the error
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
+from chromadb import Client
 from langchain.llms import OpenAI
+
 
 
 class PersonalizedPorfolioManager:
@@ -22,19 +28,15 @@ class PersonalizedPorfolioManager:
         self.api_key = api_key
 
         # Initialize ChromaDB client
-        self.chroma_client = chromadb.Client(
+        self.chroma_client = Client(
             Settings(
-                chroma_db_impl="duckdb+parquet",
-                persist_directory=chroma_persist_dir
+                persist_directory=chroma_persist_dir  # Adjust path as necessary
             )
         )
 
-        # Define a collection in ChromaDB
+        # Initialize the collection
         self.collection = self.chroma_client.get_or_create_collection(
-            name="financial_data",
-            embedding_function=embedding_functions.OpenAIEmbeddingFunction(
-                api_key=self.api_key
-            )
+            name="financial_data"
         )
 
     def fetch_yahoo_finance_dataset(self, symbols: List[str]) -> Dict:
