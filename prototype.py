@@ -45,8 +45,16 @@ class PersonalizedPorfolioManager:
         Returns:
                 Dictionary containing financial data.
         """
-        # Replace with actual Yahoo Finance API
-        return {symbol: {"price": 100 + i, "volume": 1000 * i} for i, symbol in enumerate(symbols)}
+        data: Dict = {}
+        for i, symbol in enumerate(symbols):
+            try:
+                price = 100 + i
+                volume = 1000 * i
+                data[symbol] = {"price": price, "volume": volume}
+            except Exception as e:
+                print(f"Error fetching data for symbol {symbol}: {e}")
+        
+        return data
 
     def scrape_blog_newsletter(self, url: str) -> str:
         """another dataset source,scraping and extract text content from a blog or newsletter.
@@ -57,11 +65,16 @@ class PersonalizedPorfolioManager:
         Returns:
                 Cleaned and preprocessed text content.
         """
-        response = requests.get(url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        text = soup.get_text()  
-        cleaned_text = self.data_cleaning(text)  # Preprocess the raw text
-        return cleaned_text
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an error for bad responses
+            soup = BeautifulSoup(response.content, 'html.parser')
+            text = soup.get_text()  
+            cleaned_text = self.data_cleaning(text)  # Preprocess the raw text
+            return cleaned_text
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching URL {url}: {e}")
+            return ""
 
     def data_cleaning(self, text: str) -> str:
         """We clean and preprocess text content.
@@ -137,11 +150,9 @@ class PersonalizedPorfolioManager:
         """
         # Concatenate retrieved context into a single string
         context_text = "\n\n".join([doc["document"] for doc in context])
+        # create a prompt
+        prompt = f"""You are a financial expert. Answer the following question based on the context provided."""
 
-        # Create a prompt
-        prompt = f"""You are a financial expert. Answer the following question based on the context provided"""
-
-        # Generate response using OpenAI/bloomberg gpt
         model = OpenAI(temperature=0.7, api_key=self.api_key)
         return model(prompt)
 
