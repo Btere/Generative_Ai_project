@@ -167,7 +167,7 @@ class PersonalizedPorfolioManager:
         chunks = self.split_text(text)
 
         for idx, chunk in enumerate(chunks):
-            chunk_metadata = {**metadata, "chunk_id": idx}
+            chunk_metadata: Dict = {**metadata, "chunk_id": idx}
             self.store_text_vectors_to_chromadb(text=chunk, metadata=chunk_metadata)
 
 def main():
