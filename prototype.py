@@ -178,7 +178,7 @@ def main():
 
     # Fetch Yahoo Finance dataset
     symbols = ["AAPL", "MSFT", "GOOGL"]
-    finance_data = portfolio_.fetch_yahoo_finance_data(symbols)
+    finance_data = portfolio_.fetch_yahoo_finance_dataset(symbols)
     print("Finance Data:", finance_data)
 
     # Ingesting dataset from a blog
