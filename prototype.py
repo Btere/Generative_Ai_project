@@ -157,8 +157,7 @@ class PersonalizedPorfolioManager:
         return model(prompt)
 
     def ingest_data(self, url: str, metadata: Dict):
-        """
-        Ingest data from a blog or newsletter, preprocess, split, and store in ChromaDB.
+        """Ingest data from a blog or newsletter, preprocess, split, and store in ChromaDB.
 
         Args:
             url: URL of the blog or newsletter.
