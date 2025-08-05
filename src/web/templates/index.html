@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stran Connect - Virtual Try-On</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <h1><i class="fas fa-cut"></i> Stran Connect</h1>
+                    <span class="tagline">Virtual Try-On</span>
+                </div>
+                <nav class="nav">
+                    <a href="#home" class="nav-link active">Home</a>
+                    <a href="#analysis" class="nav-link">Analysis</a>
+                    <a href="#recommendations" class="nav-link">Styles</a>
+                    <a href="#about" class="nav-link">About</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Hero Section -->
+        <section id="home" class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <div class="hero-text">
+                        <h2 class="hero-title">Discover Your Perfect Hairstyle</h2>
+                        <p class="hero-description">
+                            Upload your photo or use your camera to get personalized hairstyle recommendations 
+                            based on your unique facial shape. Our AI-powered system analyzes your features 
+                            and suggests styles that will look amazing on you.
+                        </p>
+                        <div class="hero-features">
+                            <div class="feature">
+                                <i class="fas fa-camera"></i>
+                                <span>Camera & Upload</span>
+                            </div>
+                            <div class="feature">
+                                <i class="fas fa-brain"></i>
+                                <span>AI Analysis</span>
+                            </div>
+                            <div class="feature">
+                                <i class="fas fa-star"></i>
+                                <span>Personalized Styles</span>
+                            </div>
+                        </div>
+                        <button class="cta-button" onclick="scrollToAnalysis()">
+                            Get Started <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                    <div class="hero-visual">
+                        <div class="face-shapes-grid">
+                            <div class="face-shape" data-shape="oval">
+                                <div class="shape-icon oval"></div>
+                                <span>Oval</span>
+                            </div>
+                            <div class="face-shape" data-shape="round">
+                                <div class="shape-icon round"></div>
+                                <span>Round</span>
+                            </div>
+                            <div class="face-shape" data-shape="square">
+                                <div class="shape-icon square"></div>
+                                <span>Square</span>
+                            </div>
+                            <div class="face-shape" data-shape="heart">
+                                <div class="shape-icon heart"></div>
+                                <span>Heart</span>
+                            </div>
+                            <div class="face-shape" data-shape="diamond">
+                                <div class="shape-icon diamond"></div>
+                                <span>Diamond</span>
+                            </div>
+                            <div class="face-shape" data-shape="long">
+                                <div class="shape-icon long"></div>
+                                <span>Long</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Analysis Section -->
+        <section id="analysis" class="analysis-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Face Shape Analysis</h2>
+                    <p>Upload a photo or use your camera to analyze your facial shape</p>
+                </div>
+
+                <div class="analysis-container">
+                    <!-- Image Input Area -->
+                    <div class="image-input-area">
+                        <div class="input-options">
+                            <button class="input-button camera-button" onclick="startCamera()">
+                                <i class="fas fa-camera"></i>
+                                <span>Use Camera</span>
+                            </button>
+                            <button class="input-button upload-button" onclick="triggerFileUpload()">
+                                <i class="fas fa-upload"></i>
+                                <span>Upload Photo</span>
+                            </button>
+                            <input type="file" id="file-input" accept="image/*" style="display: none;" onchange="handleFileUpload(event)">
+                        </div>
+
+                        <!-- Image Preview Area -->
+                        <div class="image-preview" id="image-preview">
+                            <div class="preview-placeholder">
+                                <i class="fas fa-image"></i>
+                                <p>Your photo will appear here</p>
+                            </div>
+                        </div>
+
+                        <!-- Camera Feed (hidden by default) -->
+                        <div class="camera-container" id="camera-container" style="display: none;">
+                            <video id="camera-feed" autoplay playsinline></video>
+                            <div class="camera-controls">
+                                <button class="capture-button" onclick="capturePhoto()">
+                                    <i class="fas fa-camera"></i>
+                                    Capture
+                                </button>
+                                <button class="close-camera-button" onclick="stopCamera()">
+                                    <i class="fas fa-times"></i>
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preferences Panel -->
+                    <div class="preferences-panel">
+                        <h3>Your Preferences</h3>
+                        <form id="preferences-form">
+                            <div class="form-group">
+                                <label for="hair-texture">Hair Texture</label>
+                                <select id="hair-texture" name="hair_texture">
+                                    <option value="">Select your hair texture</option>
+                                    <option value="straight">Straight</option>
+                                    <option value="wavy">Wavy</option>
+                                    <option value="curly">Curly</option>
+                                    <option value="coily">Coily</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="preferred-length">Preferred Length</label>
+                                <select id="preferred-length" name="preferred_length">
+                                    <option value="">Any length</option>
+                                    <option value="short">Short</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="long">Long</option>
+                                    <option value="extra_long">Extra Long</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="maintenance-level">Maintenance Level</label>
+                                <select id="maintenance-level" name="maintenance_preference">
+                                    <option value="">Any maintenance</option>
+                                    <option value="low">Low - Minimal styling</option>
+                                    <option value="medium">Medium - Some styling</option>
+                                    <option value="high">High - Regular styling</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="lifestyle">Lifestyle</label>
+                                <select id="lifestyle" name="lifestyle">
+                                    <option value="">Select lifestyle</option>
+                                    <option value="active">Active</option>
+                                    <option value="busy">Busy Professional</option>
+                                    <option value="relaxed">Relaxed</option>
+                                    <option value="professional">Professional</option>
+                                    <option value="creative">Creative</option>
+                                </select>
+                            </div>
+                        </form>
+
+                        <!-- Analyze Button -->
+                        <button class="analyze-button" id="analyze-button" onclick="analyzeImage()" disabled>
+                            <i class="fas fa-search"></i>
+                            Analyze Face Shape
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div class="loading-indicator" id="loading-indicator" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Analyzing your facial features...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section id="results" class="results-section" style="display: none;">
+            <div class="container">
+                <div class="results-header">
+                    <h2>Your Analysis Results</h2>
+                </div>
+
+                <div class="results-content">
+                    <!-- Face Shape Result -->
+                    <div class="face-shape-result">
+                        <div class="shape-card">
+                            <div class="shape-visual" id="detected-shape-visual">
+                                <!-- Shape icon will be inserted here -->
+                            </div>
+                            <div class="shape-info">
+                                <h3 id="detected-shape-name">Face Shape</h3>
+                                <p id="detected-shape-confidence">Confidence: 0%</p>
+                                <div class="characteristics" id="shape-characteristics">
+                                    <!-- Characteristics will be inserted here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Measurements -->
+                    <div class="measurements-panel" id="measurements-panel">
+                        <h3>Facial Measurements</h3>
+                        <div class="measurements-grid" id="measurements-grid">
+                            <!-- Measurements will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recommendations Section -->
+        <section id="recommendations" class="recommendations-section" style="display: none;">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Recommended Hairstyles</h2>
+                    <p id="recommendations-subtitle">Styles that complement your face shape</p>
+                </div>
+
+                <!-- Styling Principles -->
+                <div class="styling-principles" id="styling-principles">
+                    <h3>Styling Guidelines for You</h3>
+                    <div class="principles-grid">
+                        <div class="do-section">
+                            <h4><i class="fas fa-check-circle"></i> Do</h4>
+                            <ul id="styling-do-list">
+                                <!-- Styling principles will be inserted here -->
+                            </ul>
+                        </div>
+                        <div class="dont-section">
+                            <h4><i class="fas fa-times-circle"></i> Avoid</h4>
+                            <ul id="styling-dont-list">
+                                <!-- Avoid styles will be inserted here -->
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hairstyle Recommendations -->
+                <div class="hairstyles-grid" id="hairstyles-grid">
+                    <!-- Hairstyle cards will be inserted here -->
+                </div>
+
+                <!-- Personalization Notes -->
+                <div class="personalization-notes" id="personalization-notes">
+                    <h3>Personal Notes</h3>
+                    <div id="notes-content">
+                        <!-- Personal notes will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Stran Connect</h3>
+                    <p>AI-powered virtual try-on technology for personalized styling recommendations.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Features</h4>
+                    <ul>
+                        <li>Face Shape Analysis</li>
+                        <li>Hairstyle Recommendations</li>
+                        <li>Personal Styling Tips</li>
+                        <li>Camera Integration</li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Technology</h4>
+                    <ul>
+                        <li>MediaPipe Face Detection</li>
+                        <li>Machine Learning</li>
+                        <li>Expert Styling Knowledge</li>
+                        <li>Real-time Processing</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Stran Connect. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
