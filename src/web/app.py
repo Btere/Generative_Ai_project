@@ -26,11 +26,12 @@ import numpy as np
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
-from core.face_detector import FaceDetector
+from core.cnn_face_detector import CNNFaceDetector
 from core.shape_analyzer import FacialShapeAnalyzer, ShapeAnalysisResult, FaceShape
 from core.hairstyle_engine import HairstyleRecommendationEngine, RecommendationResult
 from utils.image_processor import ImageProcessor
 from utils.validators import InputValidator, ValidationError
+from models.facial_detection_model import ModelConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +91,12 @@ class VirtualTryOnApp:
         self.app.config['SECRET_KEY'] = 'stran-connect-virtual-tryon-2024'
         
         # Initialize components
-        self.face_detector = FaceDetector()
+        model_config = ModelConfig()
+        self.face_detector = CNNFaceDetector(
+            model_path=None,  # Will use random weights initially - replace with trained model
+            config=model_config,
+            device='auto'
+        )
         self.shape_analyzer = FacialShapeAnalyzer()
         self.hairstyle_engine = HairstyleRecommendationEngine()
         self.image_processor = ImageProcessor()
@@ -354,9 +360,9 @@ class VirtualTryOnApp:
             processed_image: np.ndarray = self.image_processor.preprocess_image(image)
             
             # Detect faces and extract measurements
-            face_detection_success, landmarks = self.face_detector.detect_faces(processed_image)
+            face_detection_success, detection_results = self.face_detector.detect_faces(processed_image)
             
-            if not face_detection_success or not landmarks:
+            if not face_detection_success or not detection_results:
                 return AnalysisResponse(
                     success=False,
                     face_shape=None,
@@ -373,7 +379,7 @@ class VirtualTryOnApp:
             
             # Extract facial measurements
             measurements: Dict[str, float] = self.face_detector.extract_facial_measurements(
-                landmarks, processed_image.shape
+                detection_results, processed_image.shape
             )
             
             # Validate measurements
