@@ -1,536 +1,524 @@
 """
 Flask Web Application for Virtual Try-On System
 
-This module provides the main web interface for the Stran Connect virtual try-on
-system, including endpoints for image upload, camera capture, face analysis,
-and hairstyle recommendations.
+This module provides the main web interface for the virtual try-on system,
+including camera integration, image upload, face analysis, and hairstyle
+recommendations with comprehensive typing.
 
 Author: Stran Connect Team
 """
 
-import os
-import sys
-import json
-import uuid
-import traceback
+import io
+import base64
 from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Optional, Any
-
-# Add src directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from flask import Flask, render_template, request, jsonify, send_file, session
-from flask_cors import CORS
-import numpy as np
-import cv2
+from typing import Dict, List, Tuple, Optional, Union, Any, TypedDict
+import json
 import logging
+from datetime import datetime
 
-# Import our modules
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
+from werkzeug.datastructures import FileStorage
+import cv2
+import numpy as np
+
+# Import our custom modules
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+
 from core.face_detector import FaceDetector
-from core.shape_analyzer import FacialShapeAnalyzer, FaceShape
-from core.hairstyle_engine import HairstyleRecommendationEngine
+from core.shape_analyzer import FacialShapeAnalyzer, ShapeAnalysisResult, FaceShape
+from core.hairstyle_engine import HairstyleRecommendationEngine, RecommendationResult
 from utils.image_processor import ImageProcessor
 from utils.validators import InputValidator, ValidationError
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask application
-app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'stran-connect-virtual-tryon-2024')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Enable CORS for frontend integration
-CORS(app, origins=['http://localhost:3000', 'http://127.0.0.1:3000'])
+class AnalysisRequest(TypedDict):
+    """Type definition for analysis request data."""
+    image_data: str
+    preferences: Optional[Dict[str, Any]]
+    include_landmarks: Optional[bool]
+    top_n: Optional[int]
 
-# Initialize system components
-try:
-    face_detector = FaceDetector()
-    shape_analyzer = FacialShapeAnalyzer()
-    hairstyle_engine = HairstyleRecommendationEngine()
-    image_processor = ImageProcessor()
-    validator = InputValidator()
+
+class AnalysisResponse(TypedDict):
+    """Type definition for analysis response data."""
+    success: bool
+    face_shape: Optional[str]
+    confidence: Optional[float]
+    measurements: Optional[Dict[str, float]]
+    recommendations: Optional[List[Dict[str, Any]]]
+    characteristics: Optional[List[str]]
+    styling_principles: Optional[List[str]]
+    avoid_styles: Optional[List[str]]
+    personalization_notes: Optional[List[str]]
+    error_message: Optional[str]
+    processing_time: Optional[float]
+
+
+class VirtualTryOnApp:
+    """
+    Main Flask application class for the virtual try-on system.
     
-    logger.info("All system components initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize system components: {str(e)}")
-    raise
-
-# Create upload directory
-UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
-
-
-@app.route('/')
-def index():
-    """Main application page."""
-    return render_template('index.html')
-
-
-@app.route('/api/health')
-def health_check():
-    """Health check endpoint."""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'version': '1.0.0',
-        'components': {
-            'face_detector': 'ready',
-            'shape_analyzer': 'ready',
-            'hairstyle_engine': 'ready',
-            'image_processor': 'ready'
-        }
-    })
-
-
-@app.route('/api/upload', methods=['POST'])
-def upload_image():
+    This class encapsulates the web application logic, route handlers,
+    and integration with the face analysis pipeline.
     """
-    Handle image upload from file or base64 data.
     
-    Expected JSON payload:
-    {
-        "image_data": "base64_encoded_image_data",
-        "filename": "optional_filename",
-        "preferences": {
-            "preferred_length": "medium",
-            "hair_texture": "wavy",
-            "maintenance_preference": "low"
-        }
-    }
-    """
-    try:
-        # Get request data
-        if request.is_json:
-            data = request.get_json()
-        else:
-            return jsonify({'error': 'Content-Type must be application/json'}), 400
+    def __init__(
+        self, 
+        upload_folder: Union[str, Path] = "uploads",
+        max_content_length: int = 16 * 1024 * 1024  # 16MB
+    ) -> None:
+        """
+        Initialize the Flask application with configuration.
         
-        # Validate request
-        validation_result = validator.validate_api_request(
-            data, 
-            required_fields=['image_data']
-        )
+        Args:
+            upload_folder: Directory for uploaded files
+            max_content_length: Maximum file upload size in bytes
+        """
+        self.app = Flask(__name__)
+        self.upload_folder = Path(upload_folder)
+        self.upload_folder.mkdir(exist_ok=True)
         
-        if not validation_result['is_valid']:
-            return jsonify({
-                'error': 'Validation failed',
-                'details': validation_result['errors']
-            }), 400
+        # Configure Flask app
+        self.app.config['UPLOAD_FOLDER'] = str(self.upload_folder)
+        self.app.config['MAX_CONTENT_LENGTH'] = max_content_length
+        self.app.config['SECRET_KEY'] = 'stran-connect-virtual-tryon-2024'
         
-        # Process image
-        image_data = data['image_data']
-        preferences = data.get('preferences', {})
+        # Initialize components
+        self.face_detector = FaceDetector()
+        self.shape_analyzer = FacialShapeAnalyzer()
+        self.hairstyle_engine = HairstyleRecommendationEngine()
+        self.image_processor = ImageProcessor()
+        self.validator = InputValidator()
         
-        # Load image from base64
-        image = image_processor.load_from_base64(image_data)
-        if image is None:
-            return jsonify({'error': 'Could not load image from provided data'}), 400
+        # Register routes
+        self._register_routes()
         
-        # Validate image quality
-        quality_validation = image_processor.validate_image_quality(image)
-        if not quality_validation['is_valid']:
-            return jsonify({
-                'error': 'Image quality validation failed',
-                'details': quality_validation['errors'],
-                'warnings': quality_validation.get('warnings', [])
-            }), 400
+        # Allowed file extensions
+        self.allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
         
-        # Preprocess image
-        processed_image = image_processor.preprocess_image(image)
-        
-        # Analyze face
-        analysis_result = analyze_face_complete(processed_image, preferences)
-        
-        # Save processed image if analysis was successful
-        if analysis_result['success']:
-            session_id = str(uuid.uuid4())
-            session['current_session'] = session_id
-            
-            # Save original and processed images
-            original_path = UPLOAD_DIR / f"{session_id}_original.jpg"
-            processed_path = UPLOAD_DIR / f"{session_id}_processed.jpg"
-            
-            image_processor.save_image(image, original_path)
-            image_processor.save_image(processed_image, processed_path)
-            
-            analysis_result['session_id'] = session_id
-            analysis_result['image_info'] = image_processor.get_image_info(processed_image)
-        
-        return jsonify(analysis_result)
-        
-    except Exception as e:
-        logger.error(f"Error in upload_image: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
-
-
-@app.route('/api/camera/capture', methods=['POST'])
-def capture_from_camera():
-    """
-    Capture image from camera and analyze.
+        logger.info("VirtualTryOnApp initialized successfully")
     
-    Expected JSON payload:
-    {
-        "camera_index": 0,
-        "preferences": {
-            "preferred_length": "medium",
-            "hair_texture": "wavy"
-        }
-    }
-    """
-    try:
-        data = request.get_json() or {}
-        camera_index = data.get('camera_index', 0)
-        preferences = data.get('preferences', {})
+    def _register_routes(self) -> None:
+        """Register all Flask routes with proper typing."""
         
-        # Capture image from camera
-        captured_images = image_processor.capture_from_camera(
-            camera_index=camera_index,
-            capture_count=1
-        )
+        @self.app.route('/')
+        def index() -> str:
+            """Serve the main application page."""
+            return render_template('index.html')
         
-        if not captured_images:
-            return jsonify({'error': 'Failed to capture image from camera'}), 400
-        
-        image = captured_images[0]
-        
-        # Validate image quality
-        quality_validation = image_processor.validate_image_quality(image)
-        if not quality_validation['is_valid']:
-            return jsonify({
-                'error': 'Captured image quality is insufficient',
-                'details': quality_validation['errors'],
-                'warnings': quality_validation.get('warnings', [])
-            }), 400
-        
-        # Preprocess image
-        processed_image = image_processor.preprocess_image(image)
-        
-        # Analyze face
-        analysis_result = analyze_face_complete(processed_image, preferences)
-        
-        # Save images if analysis was successful
-        if analysis_result['success']:
-            session_id = str(uuid.uuid4())
-            session['current_session'] = session_id
+        @self.app.route('/api/analyze', methods=['POST'])
+        def analyze_face() -> Tuple[Dict[str, Any], int]:
+            """
+            Analyze uploaded image for face shape and provide recommendations.
             
-            original_path = UPLOAD_DIR / f"{session_id}_camera.jpg"
-            processed_path = UPLOAD_DIR / f"{session_id}_processed.jpg"
+            Returns:
+                Tuple of (response_data, status_code)
+            """
+            start_time = datetime.now()
             
-            image_processor.save_image(image, original_path)
-            image_processor.save_image(processed_image, processed_path)
+            try:
+                # Validate request
+                if not request.is_json:
+                    return {'success': False, 'error_message': 'Content-Type must be application/json'}, 400
+                
+                request_data: Dict[str, Any] = request.get_json()
+                
+                # Validate required fields
+                validation_result = self.validator.validate_api_request(
+                    request_data, 
+                    required_fields=['image_data']
+                )
+                
+                if not validation_result['is_valid']:
+                    return {
+                        'success': False, 
+                        'error_message': '; '.join(validation_result['errors'])
+                    }, 400
+                
+                # Process the analysis request
+                analysis_result = self._process_analysis_request(request_data)
+                
+                # Calculate processing time
+                processing_time = (datetime.now() - start_time).total_seconds()
+                analysis_result['processing_time'] = processing_time
+                
+                status_code = 200 if analysis_result['success'] else 500
+                return analysis_result, status_code
+                
+            except Exception as e:
+                logger.error(f"Error in analyze_face: {str(e)}")
+                processing_time = (datetime.now() - start_time).total_seconds()
+                return {
+                    'success': False,
+                    'error_message': f'Analysis failed: {str(e)}',
+                    'processing_time': processing_time
+                }, 500
+        
+        @self.app.route('/api/upload', methods=['POST'])
+        def upload_file() -> Tuple[Dict[str, Any], int]:
+            """
+            Handle file uploads with validation.
             
-            analysis_result['session_id'] = session_id
-            analysis_result['image_info'] = image_processor.get_image_info(processed_image)
+            Returns:
+                Tuple of (response_data, status_code)
+            """
+            try:
+                if 'file' not in request.files:
+                    return {'success': False, 'error_message': 'No file provided'}, 400
+                
+                file: FileStorage = request.files['file']
+                
+                if file.filename == '':
+                    return {'success': False, 'error_message': 'No file selected'}, 400
+                
+                # Validate file
+                file_validation = self._validate_uploaded_file(file)
+                if not file_validation['success']:
+                    return file_validation, 400
+                
+                # Save file securely
+                filename = secure_filename(file.filename)
+                file_path = self.upload_folder / filename
+                file.save(str(file_path))
+                
+                # Convert to base64 for processing
+                image = self.image_processor.load_image(file_path)
+                if image is None:
+                    return {'success': False, 'error_message': 'Could not process uploaded image'}, 400
+                
+                base64_data = self.image_processor.to_base64(image)
+                
+                # Clean up uploaded file
+                file_path.unlink(missing_ok=True)
+                
+                return {
+                    'success': True,
+                    'image_data': base64_data,
+                    'filename': filename
+                }, 200
+                
+            except Exception as e:
+                logger.error(f"Error in upload_file: {str(e)}")
+                return {'success': False, 'error_message': f'Upload failed: {str(e)}'}, 500
         
-        return jsonify(analysis_result)
+        @self.app.route('/api/camera/capture', methods=['POST'])
+        def capture_from_camera() -> Tuple[Dict[str, Any], int]:
+            """
+            Capture image from camera.
+            
+            Returns:
+                Tuple of (response_data, status_code)
+            """
+            try:
+                request_data: Dict[str, Any] = request.get_json() or {}
+                camera_index: int = request_data.get('camera_index', 0)
+                
+                # Capture image
+                captured_images = self.image_processor.capture_from_camera(
+                    camera_index=camera_index,
+                    capture_count=1
+                )
+                
+                if not captured_images:
+                    return {'success': False, 'error_message': 'Failed to capture image from camera'}, 500
+                
+                # Convert to base64
+                base64_data = self.image_processor.to_base64(captured_images[0])
+                
+                return {
+                    'success': True,
+                    'image_data': base64_data
+                }, 200
+                
+            except Exception as e:
+                logger.error(f"Error in capture_from_camera: {str(e)}")
+                return {'success': False, 'error_message': f'Camera capture failed: {str(e)}'}, 500
         
-    except Exception as e:
-        logger.error(f"Error in capture_from_camera: {str(e)}")
-        return jsonify({'error': 'Camera capture failed', 'details': str(e)}), 500
-
-
-@app.route('/api/analyze', methods=['POST'])
-def analyze_face():
-    """
-    Analyze uploaded image for face shape and provide recommendations.
+        @self.app.route('/api/preferences/validate', methods=['POST'])
+        def validate_preferences() -> Tuple[Dict[str, Any], int]:
+            """
+            Validate user preferences.
+            
+            Returns:
+                Tuple of (response_data, status_code)
+            """
+            try:
+                request_data: Dict[str, Any] = request.get_json() or {}
+                preferences: Dict[str, Any] = request_data.get('preferences', {})
+                
+                validation_result = self.validator.validate_user_preferences(preferences)
+                
+                return {
+                    'success': validation_result['is_valid'],
+                    'validation_result': validation_result
+                }, 200
+                
+            except Exception as e:
+                logger.error(f"Error in validate_preferences: {str(e)}")
+                return {'success': False, 'error_message': f'Validation failed: {str(e)}'}, 500
+        
+        @self.app.route('/api/hairstyles/<shape>')
+        def get_hairstyles_for_shape(shape: str) -> Tuple[Dict[str, Any], int]:
+            """
+            Get hairstyle recommendations for a specific face shape.
+            
+            Args:
+                shape: Face shape name
+                
+            Returns:
+                Tuple of (response_data, status_code)
+            """
+            try:
+                # Validate face shape
+                try:
+                    face_shape = FaceShape(shape.lower())
+                except ValueError:
+                    return {'success': False, 'error_message': f'Invalid face shape: {shape}'}, 400
+                
+                # Get shape description
+                description = self.shape_analyzer.get_shape_description(face_shape)
+                
+                return {
+                    'success': True,
+                    'face_shape': face_shape.value,
+                    'description': description
+                }, 200
+                
+            except Exception as e:
+                logger.error(f"Error in get_hairstyles_for_shape: {str(e)}")
+                return {'success': False, 'error_message': f'Failed to get hairstyles: {str(e)}'}, 500
+        
+        @self.app.route('/static/<path:filename>')
+        def serve_static(filename: str) -> Any:
+            """Serve static files."""
+            return send_from_directory(self.app.static_folder, filename)
     
-    This is a simplified endpoint that expects image data and returns analysis.
-    """
-    try:
-        data = request.get_json()
-        if not data or 'image_data' not in data:
-            return jsonify({'error': 'No image data provided'}), 400
+    def _process_analysis_request(self, request_data: Dict[str, Any]) -> AnalysisResponse:
+        """
+        Process face analysis request with comprehensive typing.
         
-        # Load and process image
-        image = image_processor.load_from_base64(data['image_data'])
-        if image is None:
-            return jsonify({'error': 'Invalid image data'}), 400
-        
-        # Get analysis
-        result = analyze_face_complete(image, data.get('preferences', {}))
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Error in analyze_face: {str(e)}")
-        return jsonify({'error': 'Analysis failed', 'details': str(e)}), 500
-
-
-@app.route('/api/recommendations/<face_shape>')
-def get_recommendations_for_shape(face_shape):
-    """Get hairstyle recommendations for a specific face shape."""
-    try:
-        # Validate face shape
+        Args:
+            request_data: Request data containing image and preferences
+            
+        Returns:
+            Analysis response with results or error information
+        """
         try:
-            shape_enum = FaceShape(face_shape.lower())
-        except ValueError:
-            return jsonify({'error': f'Invalid face shape: {face_shape}'}), 400
-        
-        # Get preferences from query parameters
-        preferences = {}
-        if request.args.get('preferred_length'):
-            preferences['preferred_length'] = request.args.get('preferred_length')
-        if request.args.get('hair_texture'):
-            preferences['hair_texture'] = request.args.get('hair_texture')
-        if request.args.get('maintenance_preference'):
-            preferences['maintenance_preference'] = request.args.get('maintenance_preference')
-        
-        # Create mock analysis result for the shape
-        from core.shape_analyzer import ShapeAnalysisResult
-        mock_analysis = ShapeAnalysisResult(
-            primary_shape=shape_enum,
-            confidence=0.85
-        )
-        
-        # Get recommendations
-        recommendations = hairstyle_engine.get_recommendations(
-            mock_analysis,
-            preferences,
-            top_n=int(request.args.get('top_n', 10))
-        )
-        
-        return jsonify(format_recommendations_response(recommendations))
-        
-    except Exception as e:
-        logger.error(f"Error getting recommendations: {str(e)}")
-        return jsonify({'error': 'Failed to get recommendations', 'details': str(e)}), 500
-
-
-@app.route('/api/face-shapes')
-def get_face_shapes():
-    """Get list of all supported face shapes with descriptions."""
-    try:
-        shapes_info = {}
-        
-        for shape in FaceShape:
-            if shape != FaceShape.UNKNOWN:
-                description = shape_analyzer.get_shape_description(shape)
-                shapes_info[shape.value] = {
-                    'name': shape.value.title(),
-                    'description': description.get('description', ''),
-                    'styling_advice': description.get('styling_advice', ''),
-                    'recommended_styles': description.get('recommended_styles', [])
+            # Extract parameters
+            image_data: str = request_data['image_data']
+            preferences: Optional[Dict[str, Any]] = request_data.get('preferences')
+            include_landmarks: bool = request_data.get('include_landmarks', False)
+            top_n: int = request_data.get('top_n', 5)
+            
+            # Load image from base64
+            image: Optional[np.ndarray] = self.image_processor.load_from_base64(image_data)
+            if image is None:
+                return AnalysisResponse(
+                    success=False,
+                    face_shape=None,
+                    confidence=None,
+                    measurements=None,
+                    recommendations=None,
+                    characteristics=None,
+                    styling_principles=None,
+                    avoid_styles=None,
+                    personalization_notes=None,
+                    error_message="Could not decode image data",
+                    processing_time=None
+                )
+            
+            # Validate image quality
+            quality_validation = self.image_processor.validate_image_quality(image)
+            if not quality_validation['is_valid']:
+                return AnalysisResponse(
+                    success=False,
+                    face_shape=None,
+                    confidence=None,
+                    measurements=None,
+                    recommendations=None,
+                    characteristics=None,
+                    styling_principles=None,
+                    avoid_styles=None,
+                    personalization_notes=None,
+                    error_message=f"Image quality issues: {'; '.join(quality_validation['errors'])}",
+                    processing_time=None
+                )
+            
+            # Preprocess image
+            processed_image: np.ndarray = self.image_processor.preprocess_image(image)
+            
+            # Detect faces and extract measurements
+            face_detection_success, landmarks = self.face_detector.detect_faces(processed_image)
+            
+            if not face_detection_success or not landmarks:
+                return AnalysisResponse(
+                    success=False,
+                    face_shape=None,
+                    confidence=None,
+                    measurements=None,
+                    recommendations=None,
+                    characteristics=None,
+                    styling_principles=None,
+                    avoid_styles=None,
+                    personalization_notes=None,
+                    error_message="No face detected in the image",
+                    processing_time=None
+                )
+            
+            # Extract facial measurements
+            measurements: Dict[str, float] = self.face_detector.extract_facial_measurements(
+                landmarks, processed_image.shape
+            )
+            
+            # Validate measurements
+            measurement_validation = self.validator.validate_facial_measurements(measurements)
+            if not measurement_validation['is_valid']:
+                return AnalysisResponse(
+                    success=False,
+                    face_shape=None,
+                    confidence=None,
+                    measurements=None,
+                    recommendations=None,
+                    characteristics=None,
+                    styling_principles=None,
+                    avoid_styles=None,
+                    personalization_notes=None,
+                    error_message=f"Invalid measurements: {'; '.join(measurement_validation['errors'])}",
+                    processing_time=None
+                )
+            
+            # Analyze face shape
+            shape_analysis: ShapeAnalysisResult = self.shape_analyzer.analyze_face_shape(measurements)
+            
+            # Get hairstyle recommendations
+            recommendations: RecommendationResult = self.hairstyle_engine.get_recommendations(
+                shape_analysis, preferences, top_n
+            )
+            
+            # Format recommendations for response
+            formatted_recommendations: List[Dict[str, Any]] = [
+                {
+                    'name': rec.name,
+                    'category': rec.category.value,
+                    'description': rec.description,
+                    'suitability_score': rec.suitability_score,
+                    'styling_tips': rec.styling_tips,
+                    'maintenance_level': rec.maintenance_level,
+                    'length': rec.length.value,
+                    'texture_compatibility': [t.value for t in rec.texture_compatibility],
+                    'image_url': rec.image_url
                 }
-        
-        return jsonify(shapes_info)
-        
-    except Exception as e:
-        logger.error(f"Error getting face shapes: {str(e)}")
-        return jsonify({'error': 'Failed to get face shapes', 'details': str(e)}), 500
-
-
-@app.route('/api/session/<session_id>/image/<image_type>')
-def get_session_image(session_id, image_type):
-    """Get processed images from a session."""
-    try:
-        # Validate session
-        if session.get('current_session') != session_id:
-            return jsonify({'error': 'Invalid session'}), 403
-        
-        # Validate image type
-        if image_type not in ['original', 'processed', 'camera']:
-            return jsonify({'error': 'Invalid image type'}), 400
-        
-        # Find image file
-        image_path = UPLOAD_DIR / f"{session_id}_{image_type}.jpg"
-        
-        if not image_path.exists():
-            return jsonify({'error': 'Image not found'}), 404
-        
-        return send_file(str(image_path), mimetype='image/jpeg')
-        
-    except Exception as e:
-        logger.error(f"Error getting session image: {str(e)}")
-        return jsonify({'error': 'Failed to retrieve image', 'details': str(e)}), 500
-
-
-@app.route('/api/preferences/validate', methods=['POST'])
-def validate_preferences():
-    """Validate user preferences."""
-    try:
-        preferences = request.get_json()
-        if not preferences:
-            return jsonify({'error': 'No preferences provided'}), 400
-        
-        validation_result = validator.validate_user_preferences(preferences)
-        
-        return jsonify({
-            'valid': validation_result['is_valid'],
-            'errors': validation_result.get('errors', []),
-            'warnings': validation_result.get('warnings', [])
-        })
-        
-    except Exception as e:
-        logger.error(f"Error validating preferences: {str(e)}")
-        return jsonify({'error': 'Validation failed', 'details': str(e)}), 500
-
-
-def analyze_face_complete(image: np.ndarray, preferences: Dict = None) -> Dict:
-    """
-    Complete face analysis pipeline.
+                for rec in recommendations.top_recommendations
+            ]
+            
+            return AnalysisResponse(
+                success=True,
+                face_shape=shape_analysis.primary_shape.value,
+                confidence=shape_analysis.confidence,
+                measurements=measurements,
+                recommendations=formatted_recommendations,
+                characteristics=shape_analysis.characteristics,
+                styling_principles=recommendations.styling_principles,
+                avoid_styles=recommendations.avoid_styles,
+                personalization_notes=recommendations.personalization_notes,
+                error_message=None,
+                processing_time=None
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing analysis request: {str(e)}")
+            return AnalysisResponse(
+                success=False,
+                face_shape=None,
+                confidence=None,
+                measurements=None,
+                recommendations=None,
+                characteristics=None,
+                styling_principles=None,
+                avoid_styles=None,
+                personalization_notes=None,
+                error_message=f"Analysis failed: {str(e)}",
+                processing_time=None
+            )
     
-    Args:
-        image: Input image as numpy array
-        preferences: User preferences dictionary
+    def _validate_uploaded_file(self, file: FileStorage) -> Dict[str, Union[bool, str]]:
+        """
+        Validate uploaded file with comprehensive checks.
         
-    Returns:
-        Dictionary with complete analysis results
+        Args:
+            file: Uploaded file object
+            
+        Returns:
+            Dictionary with validation results
+        """
+        try:
+            # Check file extension
+            if file.filename:
+                file_ext = Path(file.filename).suffix.lower()
+                if file_ext not in self.allowed_extensions:
+                    return {
+                        'success': False,
+                        'error_message': f'Invalid file type. Allowed: {", ".join(self.allowed_extensions)}'
+                    }
+            
+            # Create temporary file data for validation
+            file_data = {
+                'filename': file.filename or 'unknown',
+                'content_type': file.content_type or 'unknown',
+                'size': 0  # We'll estimate this
+            }
+            
+            # Validate using our validator
+            validation_result = self.validator.validate_uploaded_file(file_data)
+            
+            if not validation_result['is_valid']:
+                return {
+                    'success': False,
+                    'error_message': '; '.join(validation_result['errors'])
+                }
+            
+            return {'success': True}
+            
+        except Exception as e:
+            logger.error(f"Error validating uploaded file: {str(e)}")
+            return {'success': False, 'error_message': f'Validation failed: {str(e)}'}
+    
+    def run(
+        self, 
+        host: str = '0.0.0.0', 
+        port: int = 5000, 
+        debug: bool = False
+    ) -> None:
+        """
+        Run the Flask application.
+        
+        Args:
+            host: Host address to bind to
+            port: Port number to listen on
+            debug: Whether to run in debug mode
+        """
+        logger.info(f"Starting Virtual Try-On application on {host}:{port}")
+        self.app.run(host=host, port=port, debug=debug)
+
+
+def create_app() -> Flask:
     """
-    try:
-        result = {
-            'success': False,
-            'face_detected': False,
-            'face_shape': None,
-            'confidence': 0.0,
-            'measurements': {},
-            'recommendations': [],
-            'styling_principles': [],
-            'avoid_styles': [],
-            'personalization_notes': [],
-            'processing_time': 0.0
-        }
-        
-        start_time = datetime.now()
-        
-        # Step 1: Detect face and extract landmarks
-        face_success, landmarks = face_detector.detect_faces(image)
-        
-        if not face_success or not landmarks:
-            result['error'] = 'No face detected in the image'
-            return result
-        
-        result['face_detected'] = True
-        
-        # Step 2: Extract facial measurements
-        measurements = face_detector.extract_facial_measurements(landmarks, image.shape)
-        
-        if not measurements:
-            result['error'] = 'Could not extract facial measurements'
-            return result
-        
-        result['measurements'] = measurements
-        
-        # Step 3: Analyze face shape
-        shape_analysis = shape_analyzer.analyze_face_shape(measurements)
-        
-        if shape_analysis.primary_shape == FaceShape.UNKNOWN:
-            result['error'] = 'Could not determine face shape'
-            return result
-        
-        result['face_shape'] = shape_analysis.primary_shape.value
-        result['confidence'] = shape_analysis.confidence
-        result['secondary_shape'] = shape_analysis.secondary_shape.value if shape_analysis.secondary_shape else None
-        result['characteristics'] = shape_analysis.characteristics or []
-        
-        # Step 4: Get hairstyle recommendations
-        recommendations = hairstyle_engine.get_recommendations(
-            shape_analysis,
-            preferences,
-            top_n=10
-        )
-        
-        # Format recommendations for response
-        result['recommendations'] = [
-            {
-                'name': rec.name,
-                'category': rec.category.value,
-                'description': rec.description,
-                'suitability_score': round(rec.suitability_score, 2),
-                'styling_tips': rec.styling_tips,
-                'maintenance_level': rec.maintenance_level,
-                'length': rec.length.value,
-                'texture_compatibility': [t.value for t in rec.texture_compatibility]
-            }
-            for rec in recommendations.top_recommendations
-        ]
-        
-        result['styling_principles'] = recommendations.styling_principles
-        result['avoid_styles'] = recommendations.avoid_styles
-        result['personalization_notes'] = recommendations.personalization_notes
-        
-        # Calculate processing time
-        end_time = datetime.now()
-        result['processing_time'] = (end_time - start_time).total_seconds()
-        
-        result['success'] = True
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error in analyze_face_complete: {str(e)}")
-        logger.error(traceback.format_exc())
-        return {
-            'success': False,
-            'error': 'Analysis failed',
-            'details': str(e)
-        }
-
-
-def format_recommendations_response(recommendations) -> Dict:
-    """Format recommendations for API response."""
-    return {
-        'face_shape': recommendations.face_shape.value,
-        'recommendations': [
-            {
-                'name': rec.name,
-                'category': rec.category.value,
-                'description': rec.description,
-                'suitability_score': round(rec.suitability_score, 2),
-                'styling_tips': rec.styling_tips,
-                'maintenance_level': rec.maintenance_level,
-                'length': rec.length.value,
-                'texture_compatibility': [t.value for t in rec.texture_compatibility]
-            }
-            for rec in recommendations.top_recommendations
-        ],
-        'styling_principles': recommendations.styling_principles,
-        'avoid_styles': recommendations.avoid_styles,
-        'personalization_notes': recommendations.personalization_notes,
-        'total_recommendations': len(recommendations.all_recommendations)
-    }
-
-
-@app.errorhandler(413)
-def too_large(e):
-    """Handle file too large error."""
-    return jsonify({'error': 'File too large. Maximum size is 16MB.'}), 413
-
-
-@app.errorhandler(404)
-def not_found(e):
-    """Handle 404 errors."""
-    return jsonify({'error': 'Endpoint not found'}), 404
-
-
-@app.errorhandler(500)
-def internal_error(e):
-    """Handle internal server errors."""
-    logger.error(f"Internal server error: {str(e)}")
-    return jsonify({'error': 'Internal server error'}), 500
+    Factory function to create Flask application instance.
+    
+    Returns:
+        Configured Flask application
+    """
+    virtual_tryon = VirtualTryOnApp()
+    return virtual_tryon.app
 
 
 if __name__ == '__main__':
-    # Development server configuration
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Stran Connect Virtual Try-On Server')
-    parser.add_argument('--host', default='127.0.0.1', help='Host to bind to')
-    parser.add_argument('--port', type=int, default=5000, help='Port to bind to')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    
-    args = parser.parse_args()
-    
-    logger.info(f"Starting Stran Connect Virtual Try-On Server...")
-    logger.info(f"Server will be available at: http://{args.host}:{args.port}")
-    
-    app.run(
-        host=args.host,
-        port=args.port,
-        debug=args.debug,
-        threaded=True
-    )
+    # Create and run the application
+    app_instance = VirtualTryOnApp()
+    app_instance.run(debug=True)

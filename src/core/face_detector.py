@@ -12,7 +12,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Any
 import logging
 
 # Configure logging
@@ -84,7 +84,7 @@ class FaceDetector:
         
         logger.info("FaceDetector initialized successfully")
     
-    def detect_faces(self, image: np.ndarray) -> Tuple[bool, Optional[List]]:
+    def detect_faces(self, image: np.ndarray) -> Tuple[bool, Optional[List[Any]]]:
         """
         Detect faces and extract landmarks from an image.
         
@@ -114,7 +114,7 @@ class FaceDetector:
     
     def extract_facial_measurements(
         self, 
-        landmarks: List, 
+        landmarks: List[Any], 
         image_shape: Tuple[int, int]
     ) -> Dict[str, float]:
         """
@@ -205,7 +205,7 @@ class FaceDetector:
     def draw_landmarks(
         self, 
         image: np.ndarray, 
-        landmarks: List,
+        landmarks: List[Any],
         draw_contour: bool = True
     ) -> np.ndarray:
         """

@@ -529,7 +529,7 @@ class ImageProcessor:
             logger.error(f"Error creating thumbnail: {str(e)}")
             return cv2.resize(image, size, interpolation=cv2.INTER_AREA)
     
-    def validate_image_quality(self, image: np.ndarray) -> Dict[str, Union[bool, str, float]]:
+    def validate_image_quality(self, image: np.ndarray) -> Dict[str, Union[bool, List[str], float]]:
         """
         Validate image quality for face detection.
         
@@ -540,7 +540,7 @@ class ImageProcessor:
             Dictionary with validation results
         """
         try:
-            validation_result = {
+            validation_result: Dict[str, Union[bool, List[str], float]] = {
                 'is_valid': True,
                 'warnings': [],
                 'errors': [],
